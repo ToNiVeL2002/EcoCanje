@@ -51,8 +51,6 @@ class RecoleccionesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filtroEstadoNotifier = ValueNotifier<String>('TODAS');
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mis Recolecciones'),
@@ -65,37 +63,38 @@ class RecoleccionesPage extends StatelessWidget {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Barra superior de filtro por estado
-          _buildFilterBar(filtroEstadoNotifier),
+      body: BlocConsumer<RecoleccionesCubit, RecoleccionesState>(
+        listener: (context, state) {
+          if (state is RecoleccionesError) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.mensaje),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
+        builder: (context, state) {
+          final filtroActual = (state is RecoleccionesCargadas)
+              ? state.filtroActual
+              : context.read<RecoleccionesCubit>().filtroActual;
 
-          // Listado de recolecciones
-          Expanded(
-            child: BlocConsumer<RecoleccionesCubit, RecoleccionesState>(
-              listener: (context, state) {
-                if (state is RecoleccionesError) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(state.mensaje),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-              builder: (context, state) {
-                if (state is RecoleccionesCargadas) {
-                  return ValueListenableBuilder<String>(
-                    valueListenable: filtroEstadoNotifier,
-                    builder: (context, filtroSeleccionado, _) {
-                      final recoleccionesFiltradas = state.recolecciones.where((rec) {
-                        if (filtroSeleccionado == 'TODAS') return true;
-                        return rec.estadoRecoleccion.toUpperCase() == filtroSeleccionado.toUpperCase();
-                      }).toList();
+          return Column(
+            children: [
+              // Barra superior de filtro por estado
+              _buildFilterBar(context, filtroActual),
 
-                      if (recoleccionesFiltradas.isEmpty) {
+              // Listado de recolecciones
+              Expanded(
+                child: Builder(
+                  builder: (context) {
+                    if (state is RecoleccionesCargadas) {
+                      final recolecciones = state.recolecciones;
+
+                      if (recolecciones.isEmpty) {
                         return RefreshIndicator(
-                          onRefresh: () => context.read<RecoleccionesCubit>().cargarRecolecciones(),
+                          onRefresh: () =>
+                              context.read<RecoleccionesCubit>().cargarRecolecciones(),
                           child: SingleChildScrollView(
                             physics: const AlwaysScrollableScrollPhysics(),
                             child: Container(
@@ -112,9 +111,9 @@ class RecoleccionesPage extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
-                                    filtroSeleccionado == 'TODAS'
+                                    filtroActual == 'TODAS'
                                         ? 'No tienes recolecciones aceptadas aún.'
-                                        : 'No tienes recolecciones en estado "$filtroSeleccionado".',
+                                        : 'No tienes recolecciones en estado "$filtroActual".',
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(
                                       fontSize: 16,
@@ -122,11 +121,13 @@ class RecoleccionesPage extends StatelessWidget {
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
-                                  if (filtroSeleccionado != 'TODAS') ...[
+                                  if (filtroActual != 'TODAS') ...[
                                     const SizedBox(height: 16),
                                     TextButton.icon(
                                       onPressed: () {
-                                        filtroEstadoNotifier.value = 'TODAS';
+                                        context
+                                            .read<RecoleccionesCubit>()
+                                            .cargarRecolecciones(estado: 'TODAS');
                                       },
                                       icon: const Icon(Icons.filter_alt_off),
                                       label: const Text('Mostrar todas'),
@@ -140,85 +141,86 @@ class RecoleccionesPage extends StatelessWidget {
                       }
 
                       return RefreshIndicator(
-                        onRefresh: () => context.read<RecoleccionesCubit>().cargarRecolecciones(),
+                        onRefresh: () =>
+                            context.read<RecoleccionesCubit>().cargarRecolecciones(),
                         child: ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          itemCount: recoleccionesFiltradas.length,
+                          itemCount: recolecciones.length,
                           itemBuilder: (context, index) {
-                            final rec = recoleccionesFiltradas[index];
+                            final rec = recolecciones[index];
                             return _buildRecoleccionCard(context, rec);
                           },
                         ),
                       );
-                    },
-                  );
-                }
+                    }
 
-                if (state is RecoleccionesCargando) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+                    if (state is RecoleccionesCargando) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                // Carga automática inicial si entra en cualquier otro estado
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  final cubit = context.read<RecoleccionesCubit>();
-                  if (cubit.state is! RecoleccionesCargadas && cubit.state is! RecoleccionesCargando) {
-                    cubit.cargarRecolecciones();
-                  }
-                });
+                    // Carga automática inicial si entra en cualquier otro estado (ej: RecoleccionesInitial)
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      final cubit = context.read<RecoleccionesCubit>();
+                      if (cubit.state is! RecoleccionesCargadas &&
+                          cubit.state is! RecoleccionesCargando) {
+                        cubit.cargarRecolecciones();
+                      }
+                    });
 
-                return const Center(child: CircularProgressIndicator());
-              },
-            ),
-          ),
-        ],
+                    return const Center(child: CircularProgressIndicator());
+                  },
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildFilterBar(ValueNotifier<String> filtroNotifier) {
+  Widget _buildFilterBar(BuildContext context, String filtroActual) {
     return Container(
       color: AppTheme.surface,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ValueListenableBuilder<String>(
-        valueListenable: filtroNotifier,
-        builder: (context, filtroActual, _) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: _filtrosEstado.map((f) {
-                final clave = f['clave']!;
-                final nombre = f['nombre']!;
-                final isSelected = filtroActual == clave;
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: _filtrosEstado.map((f) {
+            final clave = f['clave']!;
+            final nombre = f['nombre']!;
+            final isSelected = filtroActual.toUpperCase() == clave.toUpperCase();
 
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: FilterChip(
-                    selected: isSelected,
-                    showCheckmark: false,
-                    avatar: isSelected ? const Icon(Icons.check, size: 16, color: Colors.white) : null,
-                    label: Text(nombre),
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : AppTheme.primaryDark,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    ),
-                    backgroundColor: AppTheme.surfaceVariant,
-                    selectedColor: AppTheme.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(
-                        color: isSelected ? AppTheme.primary : Colors.transparent,
-                      ),
-                    ),
-                    onSelected: (_) {
-                      filtroNotifier.value = clave;
-                    },
+            return Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: FilterChip(
+                selected: isSelected,
+                showCheckmark: false,
+                avatar: isSelected
+                    ? const Icon(Icons.check, size: 16, color: Colors.white)
+                    : null,
+                label: Text(nombre),
+                labelStyle: TextStyle(
+                  color: isSelected ? Colors.white : AppTheme.primaryDark,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                ),
+                backgroundColor: AppTheme.surfaceVariant,
+                selectedColor: AppTheme.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(
+                    color: isSelected ? AppTheme.primary : Colors.transparent,
                   ),
-                );
-              }).toList(),
-            ),
-          );
-        },
+                ),
+                onSelected: (_) {
+                  context
+                      .read<RecoleccionesCubit>()
+                      .cargarRecolecciones(estado: clave);
+                },
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -357,7 +359,7 @@ class RecoleccionesPage extends StatelessWidget {
                   Expanded(
                     child: Text(
                       rec.estadoRecoleccion.toUpperCase() == 'ACTIVA'
-                          ? 'Recolección en proceso — Dirigete al punto de entrega más cercano.'
+                          ? 'Recolección en proceso — Ponte en contacto con el creador.'
                           : (rec.estadoRecoleccion.toUpperCase() == 'COMPLETADA'
                               ? 'Recolección completada con éxito.'
                               : 'Recolección cancelada.'),

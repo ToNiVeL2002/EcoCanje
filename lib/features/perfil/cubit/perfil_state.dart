@@ -20,6 +20,10 @@ final class PerfilCargado extends PerfilState {
   List<Object?> get props => [perfil];
 }
 
+final class PerfilCerrandoSesion extends PerfilState {}
+
+final class PerfilSesionCerrada extends PerfilState {}
+
 final class PerfilError extends PerfilState {
   final String mensaje;
 

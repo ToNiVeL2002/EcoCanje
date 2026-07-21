@@ -8,10 +8,13 @@ part 'recolecciones_state.dart';
 class RecoleccionesCubit extends Cubit<RecoleccionesState> {
   final RecoleccionesRepository _repository;
   final int? _usuarioId;
+  String _filtroActual = 'TODAS';
 
   RecoleccionesCubit(this._repository, {int? usuarioId})
       : _usuarioId = usuarioId,
         super(RecoleccionesInitial());
+
+  String get filtroActual => _filtroActual;
 
   Future<void> cargarRecolecciones({String? estado}) async {
     if (_usuarioId == null) {
@@ -19,13 +22,17 @@ class RecoleccionesCubit extends Cubit<RecoleccionesState> {
       return;
     }
 
+    if (estado != null) {
+      _filtroActual = estado;
+    }
+
     emit(RecoleccionesCargando());
     try {
       final lista = await _repository.obtenerRecoleccionesUsuario(
         idUsuarioRecolector: _usuarioId,
-        estado: estado,
+        estado: _filtroActual,
       );
-      emit(RecoleccionesCargadas(lista));
+      emit(RecoleccionesCargadas(lista, filtroActual: _filtroActual));
     } catch (e) {
       if (e.toString().contains('SocketException') || e.toString().contains('ClientException')) {
         emit(const RecoleccionesError(

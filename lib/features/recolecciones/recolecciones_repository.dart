@@ -10,11 +10,14 @@ class RecoleccionesRepository {
     required int idUsuarioRecolector,
     String? estado,
   }) async {
+    final String? filtroEstado =
+        (estado == null || estado == 'TODAS' || estado == 'TODOS') ? null : estado;
+
     final data = await _supabaseClient.rpc(
       'obtener_recolecciones_usuario',
       params: {
         'p_id_usuario_recolector': idUsuarioRecolector,
-        if (estado != null) 'p_estado': estado,
+        if (filtroEstado != null) 'p_estado': filtroEstado,
       },
     );
 

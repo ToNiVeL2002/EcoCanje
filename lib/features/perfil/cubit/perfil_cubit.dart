@@ -3,6 +3,7 @@ import 'package:ecocanje/features/login/login_model.dart';
 import 'package:ecocanje/features/perfil/perfil_model.dart';
 import 'package:ecocanje/features/perfil/perfil_repository.dart';
 import 'package:equatable/equatable.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 part 'perfil_state.dart';
 
@@ -32,6 +33,18 @@ class PerfilCubit extends Cubit<PerfilState> {
       emit(PerfilCargado(perfil));
     } catch (e) {
       emit(PerfilError('Error al cargar perfil: $e'));
+    }
+  }
+
+  Future<void> cerrarSesion() async {
+    emit(PerfilCerrandoSesion());
+    try {
+      // Limpiar sesión de Supabase Auth si aplicara
+      await Supabase.instance.client.auth.signOut();
+      emit(PerfilSesionCerrada());
+    } catch (_) {
+      // Incluso si no había auth nativa de Supabase, emitir sesión cerrada limpiamente
+      emit(PerfilSesionCerrada());
     }
   }
 }

@@ -3,12 +3,53 @@ import 'package:ecocanje/features/perfil/cubit/perfil_cubit.dart';
 import 'package:ecocanje/features/perfil/perfil_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 class PerfilPage extends StatelessWidget {
   const PerfilPage({super.key});
 
   String _formatFecha(DateTime fecha) {
     return '${fecha.day}/${fecha.month}/${fecha.year}';
+  }
+
+  Color _getEstadoColor(String estado) {
+    switch (estado.toUpperCase()) {
+      case 'DISPONIBLE':
+        return AppTheme.primary;
+      case 'OCUPADA':
+        return Colors.orange.shade800;
+      case 'ENTREGADA':
+        return Colors.blue.shade800;
+      default:
+        return AppTheme.primaryDark;
+    }
+  }
+
+  void _mostrarConfirmacionCerrarSesion(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cerrar Sesión'),
+        content: const Text('¿Estás seguro de que deseas cerrar la sesión actual?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              context.read<PerfilCubit>().cerrarSesion();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Cerrar Sesión'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -21,15 +62,29 @@ class PerfilPage extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: 'Actualizar',
             onPressed: () {
               context.read<PerfilCubit>().cargarPerfil();
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout_outlined, color: Colors.red),
+            tooltip: 'Cerrar Sesión',
+            onPressed: () => _mostrarConfirmacionCerrarSesion(context),
           ),
         ],
       ),
       body: BlocConsumer<PerfilCubit, PerfilState>(
         listener: (context, state) {
-          if (state is PerfilError) {
+          if (state is PerfilSesionCerrada) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Sesión cerrada exitosamente.'),
+                backgroundColor: AppTheme.primaryDark,
+              ),
+            );
+            context.go('/login');
+          } else if (state is PerfilError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.mensaje),
@@ -39,6 +94,10 @@ class PerfilPage extends StatelessWidget {
           }
         },
         builder: (context, state) {
+          if (state is PerfilCargando || state is PerfilCerrandoSesion) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
           if (state is PerfilCargado) {
             final perfil = state.perfil;
             final user = perfil.loginData;
@@ -114,12 +173,12 @@ class PerfilPage extends StatelessWidget {
 
                   const SizedBox(height: 20),
 
-                  // 2. Tarjeta Estilo Banco / Wallet para EcoCupones (Highlight principal)
+                  // 2. Tarjeta Estilo Banco / Wallet para EcoCupones
                   _buildBankCard(context, user),
 
                   const SizedBox(height: 24),
 
-                  // 3. Pestañas de Navegación entre Listas (Mis Publicaciones vs Historial)
+                  // 3. Pestañas de Navegación entre Listas
                   ValueListenableBuilder<int>(
                     valueListenable: tabNotifier,
                     builder: (context, currentTab, _) {
@@ -154,19 +213,42 @@ class PerfilPage extends StatelessWidget {
                       );
                     },
                   ),
+
+                  const SizedBox(height: 28),
+
+                  // 4. Botón inferior de Cerrar Sesión
+                  OutlinedButton.icon(
+                    onPressed: () => _mostrarConfirmacionCerrarSesion(context),
+                    icon: const Icon(Icons.logout, color: Colors.red, size: 20),
+                    label: const Text(
+                      'Cerrar Sesión',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
                 ],
               ),
             );
           }
 
-          if (state is PerfilCargando) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
           // Carga automática inicial si no ha cargado aún
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final cubit = context.read<PerfilCubit>();
-            if (cubit.state is! PerfilCargado && cubit.state is! PerfilCargando) {
+            if (cubit.state is! PerfilCargado &&
+                cubit.state is! PerfilCargando &&
+                cubit.state is! PerfilCerrandoSesion &&
+                cubit.state is! PerfilSesionCerrada) {
               cubit.cargarPerfil();
             }
           });
@@ -384,6 +466,8 @@ class PerfilPage extends StatelessWidget {
       itemCount: publicaciones.length,
       itemBuilder: (context, index) {
         final pub = publicaciones[index];
+        final estadoColor = _getEstadoColor(pub.estado);
+
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           elevation: 1,
@@ -397,13 +481,23 @@ class PerfilPage extends StatelessWidget {
               pub.material,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Text(pub.descripcion),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(pub.descripcion),
+                if (pub.fecha != null)
+                  Text(
+                    'Fecha: ${_formatFecha(pub.fecha!)}',
+                    style: const TextStyle(fontSize: 11, color: Colors.black45),
+                  ),
+              ],
+            ),
             trailing: Chip(
               label: Text(
                 pub.estado,
-                style: const TextStyle(fontSize: 10, color: Colors.white),
+                style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
               ),
-              backgroundColor: AppTheme.primary,
+              backgroundColor: estadoColor,
               padding: EdgeInsets.zero,
             ),
           ),
@@ -428,6 +522,8 @@ class PerfilPage extends StatelessWidget {
       itemCount: transacciones.length,
       itemBuilder: (context, index) {
         final tx = transacciones[index];
+        final titulo = tx.motivo.isNotEmpty ? tx.motivo : tx.tipoTransaccion;
+
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           elevation: 1,
@@ -441,16 +537,26 @@ class PerfilPage extends StatelessWidget {
               ),
             ),
             title: Text(
-              tx.concepto,
+              titulo,
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
-            subtitle: Text(_formatFecha(tx.fecha)),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Origen: ${tx.nombreOrigen}'),
+                if (tx.fecha != null)
+                  Text(
+                    _formatFecha(tx.fecha!),
+                    style: const TextStyle(fontSize: 11, color: Colors.black45),
+                  ),
+              ],
+            ),
             trailing: Text(
-              '${tx.esIngreso ? "+" : "-"}${tx.puntos} EC',
+              '${tx.esIngreso ? "+" : ""}${tx.cantidadEcocupones} EC',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
-                color: tx.esIngreso ? Colors.green.shade700 : Colors.orange.shade800,
+                color: tx.esIngreso ? Colors.green.shade700 : Colors.red.shade700,
               ),
             ),
           ),

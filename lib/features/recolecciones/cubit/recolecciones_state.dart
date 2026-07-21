@@ -13,11 +13,15 @@ final class RecoleccionesCargando extends RecoleccionesState {}
 
 final class RecoleccionesCargadas extends RecoleccionesState {
   final List<RecoleccionModel> recolecciones;
+  final String filtroActual;
 
-  const RecoleccionesCargadas(this.recolecciones);
+  const RecoleccionesCargadas(
+    this.recolecciones, {
+    this.filtroActual = 'TODAS',
+  });
 
   @override
-  List<Object?> get props => [recolecciones];
+  List<Object?> get props => [recolecciones, filtroActual];
 }
 
 final class RecoleccionesError extends RecoleccionesState {
