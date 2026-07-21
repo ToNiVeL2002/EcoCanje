@@ -30,6 +30,7 @@ class LoginPage extends StatelessWidget {
             listener: (context, state) {
               switch (state) {
                 case UserExists():
+                  final tipo = state.item.tipoUsuario?.toUpperCase() ?? 'USUARIO';
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
@@ -38,7 +39,13 @@ class LoginPage extends StatelessWidget {
                       backgroundColor: Colors.green,
                     ),
                   );
-                  context.go('/home', extra: state.item);
+
+                  // Segmentación por tipo de usuario
+                  if (tipo == 'EMPRESA' || tipo == 'PUNTO_ACOPIO') {
+                    context.go('/recepcion', extra: state.item);
+                  } else {
+                    context.go('/home', extra: state.item);
+                  }
 
                 case UserDoesNotExists():
                   ScaffoldMessenger.of(context).showSnackBar(
